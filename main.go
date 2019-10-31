@@ -30,7 +30,7 @@ const (
 	postUpdateReconnectionTime  = 8000
 	estimatedRoundTime          = 8000
 	estimatedWaitingTime        = 20000
-	checkinLimit                = 3
+	checkinLimit                = 2
 	VAR_NUM_CHECKINS            = 0
 	VAR_NUM_UPDATES_START       = 1
 	VAR_NUM_UPDATES_FINISH      = 2
@@ -72,6 +72,9 @@ func init() {
 }
 
 func main() {
+    // Enable line numbers in logging
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	// listen
 	lis, err := net.Listen("tcp", port)
 	check(err, "Failed to listen on port"+port)
@@ -145,7 +148,7 @@ func (s *server) ConnectionHandler() {
 				write.response <- true
 
 				// if enough updates available, start FA
-				if s.numUpdatesFinish == s.numUpdatesStart {
+				if s.numUpdatesFinish == len(selectorAddresses) {
 					// begin federated averaging process
 					log.Println("Begin Federated Averaging Process")
 					s.FederatedAveraging()

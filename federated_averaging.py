@@ -1,11 +1,12 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 import numpy as np
 import keras
 from keras.models import load_model
-import os
 
 
 def federated_averaging(updates, model_path, ckpt_path):
