@@ -1,0 +1,7 @@
+init-files-path: "/initFiles/"
+model-file: "model.h5"
+checkpoint-file: "fl_checkpoint"
+agg-checkpoint-file-path: "/fl_agg_checkpoint"
+agg-checkpoint-weight-path: "/fl_agg_checkpoint_weight"
+estimated-waiting-time: 20000
+checkin-limit: 2

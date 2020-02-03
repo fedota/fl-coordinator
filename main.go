@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	pbIntra "federated-learning/fl-coordinator/genproto/fl_intra"
-	"io"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -12,28 +13,20 @@ import (
 	"sync"
 	"time"
 
+	viper "github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
 
 var start time.Time
+var port string
 
+// TODO: Selector addresses should be sent from selector along with ID
 var selectorAddresses = []string{"localhost:50051"}
 
 // constants
 const (
-	port                        = ":50050"
-	modelFilePath               = "./data/model/model.h5"
-	checkpointFilePath          = "./data/checkpoint/fl_checkpoint"
-	weightUpdatesDir            = "./data/weight_updates/"
-	chunkSize                   = 64 * 1024
-	postCheckinReconnectionTime = 8000
-	postUpdateReconnectionTime  = 8000
-	estimatedRoundTime          = 8000
-	estimatedWaitingTime        = 20000
-	checkinLimit                = 2
-	VAR_NUM_CHECKINS            = 0
-	VAR_NUM_UPDATES_START       = 1
-	VAR_NUM_UPDATES_FINISH      = 2
+	varSelectorCheckin = iota
+	varSelectorFinish  = iota
 )
 
 // store the result from a client
@@ -51,29 +44,44 @@ type readOp struct {
 }
 type writeOp struct {
 	varType  int
+	strVal   string
 	val      int
 	response chan bool
 }
 
 // server struct to implement gRPC Round service interface
 type server struct {
-	reads             chan readOp
-	writes            chan writeOp
-	selected          chan bool
-	numCheckIns       int
-	numUpdatesStart   int
-	numUpdatesFinish  int
-	mu                sync.Mutex
-	checkpointUpdates map[int]flRoundClientResult
+	flRootPath          string
+	reads               chan readOp
+	writes              chan writeOp
+	selected            chan bool
+	numSelectorsFinish  int
+	mu                  sync.Mutex
+	selectorCheckinList map[string]bool
+	selectorFinishList  map[string]bool
 }
 
 func init() {
 	start = time.Now()
+
+	viper.SetConfigName("config") // name of config file (without extension)
+	viper.AddConfigPath(".")      // optionally look for config in the working directory
+	err := viper.ReadInConfig()   // Find and read the config file
+	if err != nil {               // Handle errors reading the config file
+		panic(fmt.Errorf("Fatal error config file: %s", err))
+	}
+	// TODO: Add defaults for config using viper
 }
 
 func main() {
-    // Enable line numbers in logging
+	// Enable line numbers in logging
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	if len(os.Args) != 2 {
+		log.Fatalln("Usage: go run ", os.Args[0], "<Coordinator Port>", "<FL Files Root>")
+	}
+	port = ":" + os.Args[1]
+	flRootPath := os.Args[2]
 
 	// listen
 	lis, err := net.Listen("tcp", port)
@@ -82,13 +90,10 @@ func main() {
 	srv := grpc.NewServer()
 	// server impl instance
 	flServerCoordinator := &server{
-		numCheckIns:       0,
-		numUpdatesStart:   0,
-		numUpdatesFinish:  0,
-		checkpointUpdates: make(map[int]flRoundClientResult),
-		reads:             make(chan readOp),
-		writes:            make(chan writeOp),
-		selected:          make(chan bool)}
+		flRootPath: flRootPath,
+		reads:      make(chan readOp),
+		writes:     make(chan writeOp),
+		selected:   make(chan bool)}
 	// register FL intra server
 
 	pbIntra.RegisterFlIntraServer(srv, flServerCoordinator)
@@ -113,42 +118,40 @@ func (s *server) ConnectionHandler() {
 		case read := <-s.reads:
 			log.Println("Handler ==> Read Query:", read.varType, "Time:", time.Since(start))
 			switch read.varType {
-			case VAR_NUM_CHECKINS:
-				read.response <- s.numCheckIns
-			case VAR_NUM_UPDATES_START:
-				read.response <- s.numUpdatesStart
-			case VAR_NUM_UPDATES_FINISH:
-				read.response <- s.numUpdatesFinish
+			case varSelectorCheckin:
+				read.response <- len(s.selectorCheckinList)
+			case varSelectorFinish:
+				read.response <- len(s.selectorFinishList)
 			}
 		// write query
 		case write := <-s.writes:
 			log.Println("Handler ==> Write Query:", write.varType, "Time:", time.Since(start))
 			switch write.varType {
-			case VAR_NUM_CHECKINS:
-				if s.numCheckIns == checkinLimit {
+			case varSelectorCheckin:
+				if len(s.selectorCheckinList) == viper.GetInt("checkin-limit") {
 					log.Println("Cannot accept client as global count is already reached. Time:", time.Since(start))
 					write.response <- false
 				} else {
-					s.numCheckIns++
-					log.Println("Handler ==> numCheckIns", s.numCheckIns, "Time:", time.Since(start))
+					s.selectorCheckinList[write.strVal] = true
+					log.Println("Handler ==> no. of selector checked in:", len(s.selectorCheckinList), "Time:", time.Since(start))
+					log.Println("Handler ==> selector id:", write.strVal, "Time:", time.Since(start))
 					log.Println("Handler ==> accepted", "Time:", time.Since(start))
 					write.response <- true
 				}
 
-			case VAR_NUM_UPDATES_START:
-				s.numUpdatesStart++
-				log.Println("Handler ==> numUpdates", s.numUpdatesStart, "Time:", time.Since(start))
-				log.Println("Handler ==> accepted update", "Time:", time.Since(start))
-				write.response <- true
-
-			case VAR_NUM_UPDATES_FINISH:
-				s.numUpdatesFinish++
-				log.Println("Handler ==> numUpdates: ", s.numUpdatesFinish, "Finish Time:", time.Since(start))
-				log.Println("Handler ==> accepted update", "Time:", time.Since(start))
-				write.response <- true
+			case varSelectorFinish:
+				// If selector participated in FL round, i.e if selector Id is present in list
+				if _, idFound := s.selectorCheckinList[write.strVal]; idFound {
+					s.selectorFinishList[write.strVal] = true
+					log.Println("Handler ==> no. of selectors having completed mid-averaging: ", len(s.selectorFinishList), "Finish Time:", time.Since(start))
+					log.Println("Handler ==> accepted update", "Time:", time.Since(start))
+					write.response <- true
+				} else {
+					write.response <- false
+				}
 
 				// if enough updates available, start FA
-				if s.numUpdatesFinish == len(selectorAddresses) {
+				if len(s.selectorFinishList) == len(s.selectorCheckinList) {
 					// begin federated averaging process
 					log.Println("Begin Federated Averaging Process")
 					s.FederatedAveraging()
@@ -156,8 +159,8 @@ func (s *server) ConnectionHandler() {
 				}
 			}
 		// After wait period check if everything is fine
-		case <-time.After(estimatedWaitingTime * time.Second):
-			log.Println("Timeout")
+		case <-time.After(time.Duration(viper.GetInt64("estimated-waiting-time")) * time.Second):
+			log.Println("Update Handler ==> Timeout", "Time:", time.Since(start))
 			// if checkin limit is not reached
 			// abandon round
 			// TODO: after checkin is done
@@ -170,10 +173,22 @@ func (s *server) ConnectionHandler() {
 // Runs federated averaging
 func (s *server) FederatedAveraging() {
 
+	completeInitPath := s.flRootPath + viper.GetString("init-files-path")
+	checkpointFilePath := completeInitPath + viper.GetString("checkpoint-file")
+	modelFilePath := completeInitPath + viper.GetString("model-file")
 	var argsList []string
 	argsList = append(argsList, "federated_averaging.py", "--cf", checkpointFilePath, "--mf", modelFilePath, "--u")
-	for _, v := range s.checkpointUpdates {
-		argsList = append(argsList, strconv.FormatInt(v.checkpointWeight, 10), v.checkpointFilePath)
+	for selectorID := range s.selectorFinishList {
+		selectorFilePath := s.flRootPath + selectorID
+		aggCheckpointFilePath := selectorFilePath + viper.GetString("agg-checkpoint-file-path")
+		aggCheckpointWeightPath := selectorFilePath + viper.GetString("agg-checkpoint-weight-path")
+		data, err := ioutil.ReadFile(aggCheckpointWeightPath)
+		if err != nil {
+			log.Println("FederatedAveraging: Unable to read checkpoint weight file. Time:", time.Since(start))
+			return
+		}
+		checkpointWeight, _ := strconv.ParseInt(string(data), 10, 64)
+		argsList = append(argsList, strconv.FormatInt(checkpointWeight, 10), aggCheckpointFilePath)
 	}
 
 	log.Println("Arguments passed to federated averaging python file: ", argsList)
@@ -189,11 +204,12 @@ func (s *server) FederatedAveraging() {
 // Sends true if the client is accepted, false if global count was already reached
 func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.ClientCount) (*pbIntra.FlClientStatus, error) {
 
-	log.Println("Received client request with id:%s : Time:", clientCount.Id, time.Since(start))
+	log.Println("Received client request from selector id:%s at : Time:", clientCount.Id, time.Since(start))
 
 	// create a write operation
 	write := writeOp{
-		varType:  VAR_NUM_CHECKINS,
+		varType:  varSelectorCheckin,
+		strVal:   clientCount.Id,
 		response: make(chan bool)}
 
 	// send to handler (ConnectionHandler) via writes channel
@@ -201,14 +217,14 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 
 	success := <-write.response
 
-	if success && s.numCheckIns == checkinLimit {
-		go broadcastGoalCountReached()
+	if success && len(s.selectorCheckinList) == viper.GetInt("checkin-limit") {
+		go s.broadcastGoalCountReached()
 	}
 
 	return &pbIntra.FlClientStatus{Accepted: success}, nil
 }
 
-func broadcastGoalCountReached() {
+func (s *server) broadcastGoalCountReached() {
 	for _, selector := range selectorAddresses {
 		var conn *grpc.ClientConn
 		conn, err := grpc.Dial(selector, grpc.WithInsecure())
@@ -228,90 +244,23 @@ func broadcastGoalCountReached() {
 	}
 }
 
-func (s *server) Update(stream pbIntra.FlIntra_UpdateServer) error {
-
-	var checkpointWeight int64
-
-	log.Println("Update Request: Time:", time.Since(start))
+func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pbIntra.SelectorId) (*pbIntra.Empty, error) {
+	log.Println("Received mid averaging complete message from selector id: %s at : Time:", selectorID.Id, time.Since(start))
 
 	// create a write operation
 	write := writeOp{
-		varType:  VAR_NUM_UPDATES_START,
+		varType:  varSelectorFinish,
+		strVal:   selectorID.Id,
 		response: make(chan bool)}
+
 	// send to handler (ConnectionHandler) via writes channel
 	s.writes <- write
 
-	// IMPORTANT
-	// after sending write request, we wait for response as handler is sending true and gets blocked
-	// if this read is not present -> handler and all subsequent rpc calls are in deadlock
 	if !(<-write.response) {
-		log.Println("Update Request Accepted: Time:", time.Since(start))
+		log.Println("Selector not considered for federated averaging process. Time:", time.Since(start))
 	}
 
-	// create read operation
-	read := readOp{
-		varType:  VAR_NUM_UPDATES_START,
-		response: make(chan int)}
-	// send to handler (ConnectionHandler) via reads channel
-	// log.Println("Read Request: Time:", time.Since(start))
-	s.reads <- read
-
-	// log.Println("Waiting Read Response: Time:", time.Since(start))
-	// get index to differentiate clients
-	index := <-read.response
-
-	log.Println("Index : ", index)
-
-	// open the file
-	// log.Println(weightUpdatesDir + strconv.Itoa(index))
-	filePath := weightUpdatesDir + "weight_updates_" + strconv.Itoa(index)
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, os.ModeAppend)
-	check(err, "Unable to open new checkpoint file")
-	defer file.Close()
-
-	for {
-		// receive Fl data
-		flData, err := stream.Recv()
-		// exit after data transfer completes
-		if err == io.EOF {
-
-			// create a write operation
-			write = writeOp{
-				varType:  VAR_NUM_UPDATES_FINISH,
-				response: make(chan bool)}
-			// send to handler (ConnectionHandler) via writes channel
-			s.writes <- write
-
-			// put result in map
-			// TODO: modify by making a go-routine to do updates
-			s.mu.Lock()
-			s.checkpointUpdates[index] = flRoundClientResult{
-				checkpointWeight:   checkpointWeight,
-				checkpointFilePath: filePath,
-			}
-			log.Println("Checkpoint Update: ", s.checkpointUpdates[index])
-			s.mu.Unlock()
-
-			if !(<-write.response) {
-				log.Println("Checkpoint Update confirmed. Time:", time.Since(start))
-			}
-
-			return stream.SendAndClose(&pbIntra.FlData{
-				IntVal: postUpdateReconnectionTime,
-				Type:   pbIntra.Type_FL_RECONN_TIME,
-			})
-		}
-		check(err, "Unable to receive update data from client")
-
-		if flData.Type == pbIntra.Type_FL_CHECKPOINT_UPDATE {
-			// write data to file
-			_, err = file.Write(flData.Message.Content)
-			check(err, "Unable to write into new checkpoint file")
-		} else if flData.Type == pbIntra.Type_FL_CHECKPOINT_WEIGHT {
-			checkpointWeight = flData.IntVal
-		}
-	}
-
+	return &pbIntra.Empty{}, nil
 }
 
 // Check for error, log and exit if err
@@ -322,8 +271,6 @@ func check(err error, errorMsg string) {
 }
 
 func (s *server) resetFLVariables() {
-	s.numCheckIns = 0
-	s.numUpdatesStart = 0
-	s.numUpdatesFinish = 0
-	s.checkpointUpdates = make(map[int]flRoundClientResult)
+	s.selectorCheckinList = make(map[string]bool)
+	s.selectorFinishList = make(map[string]bool)
 }
