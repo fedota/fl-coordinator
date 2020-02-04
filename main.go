@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"sync"
 	"time"
 
 	viper "github.com/spf13/viper"
@@ -25,8 +24,8 @@ var selectorAddresses = []string{"localhost:50051"}
 
 // constants
 const (
-	varSelectorCheckin = iota
-	varSelectorFinish  = iota
+	varClientCheckin  = iota
+	varSelectorFinish = iota
 )
 
 // store the result from a client
@@ -55,8 +54,7 @@ type server struct {
 	reads               chan readOp
 	writes              chan writeOp
 	selected            chan bool
-	numSelectorsFinish  int
-	mu                  sync.Mutex
+	numClientCheckIns   int
 	selectorCheckinList map[string]bool
 	selectorFinishList  map[string]bool
 }
@@ -77,11 +75,12 @@ func main() {
 	// Enable line numbers in logging
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	if len(os.Args) != 2 {
-		log.Fatalln("Usage: go run ", os.Args[0], "<Coordinator Port>", "<FL Files Root>")
-	}
-	port = ":" + os.Args[1]
-	flRootPath := os.Args[2]
+	// if len(os.Args) != 2 {
+	// 	log.Fatalln("Usage: go run ", os.Args[0], "<Coordinator Port>", "<FL Files Root>")
+	// }
+
+	port = ":" + viper.GetString("coordinator-port")
+	flRootPath := viper.GetString("fl-root-path")
 
 	// listen
 	lis, err := net.Listen("tcp", port)
@@ -90,10 +89,14 @@ func main() {
 	srv := grpc.NewServer()
 	// server impl instance
 	flServerCoordinator := &server{
-		flRootPath: flRootPath,
-		reads:      make(chan readOp),
-		writes:     make(chan writeOp),
-		selected:   make(chan bool)}
+		flRootPath:          flRootPath,
+		reads:               make(chan readOp),
+		writes:              make(chan writeOp),
+		selected:            make(chan bool),
+		numClientCheckIns:   0,
+		selectorCheckinList: make(map[string]bool),
+		selectorFinishList:  make(map[string]bool),
+	}
 	// register FL intra server
 
 	pbIntra.RegisterFlIntraServer(srv, flServerCoordinator)
@@ -118,8 +121,8 @@ func (s *server) ConnectionHandler() {
 		case read := <-s.reads:
 			log.Println("Handler ==> Read Query:", read.varType, "Time:", time.Since(start))
 			switch read.varType {
-			case varSelectorCheckin:
-				read.response <- len(s.selectorCheckinList)
+			case varClientCheckin:
+				read.response <- s.numClientCheckIns
 			case varSelectorFinish:
 				read.response <- len(s.selectorFinishList)
 			}
@@ -127,13 +130,14 @@ func (s *server) ConnectionHandler() {
 		case write := <-s.writes:
 			log.Println("Handler ==> Write Query:", write.varType, "Time:", time.Since(start))
 			switch write.varType {
-			case varSelectorCheckin:
-				if len(s.selectorCheckinList) == viper.GetInt("checkin-limit") {
+			case varClientCheckin:
+				if s.numClientCheckIns == viper.GetInt("checkin-limit") {
 					log.Println("Cannot accept client as global count is already reached. Time:", time.Since(start))
 					write.response <- false
 				} else {
+					s.numClientCheckIns++
 					s.selectorCheckinList[write.strVal] = true
-					log.Println("Handler ==> no. of selector checked in:", len(s.selectorCheckinList), "Time:", time.Since(start))
+					log.Println("Handler ==> no. of selector checked in:", s.numClientCheckIns, "Time:", time.Since(start))
 					log.Println("Handler ==> selector id:", write.strVal, "Time:", time.Since(start))
 					log.Println("Handler ==> accepted", "Time:", time.Since(start))
 					write.response <- true
@@ -198,17 +202,20 @@ func (s *server) FederatedAveraging() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
-	check(err, "Unable to run federated averaging")
+	if err != nil {
+		log.Println("FederatedAveraging ==> Unable to run federated averaging. Time:", time.Since(start))
+		return
+	}
 }
 
 // Sends true if the client is accepted, false if global count was already reached
 func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.ClientCount) (*pbIntra.FlClientStatus, error) {
 
-	log.Println("Received client request from selector id:%s at : Time:", clientCount.Id, time.Since(start))
+	log.Println("Received client request from selector id:", clientCount.Id, " at : Time:", time.Since(start))
 
 	// create a write operation
 	write := writeOp{
-		varType:  varSelectorCheckin,
+		varType:  varClientCheckin,
 		strVal:   clientCount.Id,
 		response: make(chan bool)}
 
@@ -217,7 +224,7 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 
 	success := <-write.response
 
-	if success && len(s.selectorCheckinList) == viper.GetInt("checkin-limit") {
+	if success && s.numClientCheckIns == viper.GetInt("checkin-limit") {
 		go s.broadcastGoalCountReached()
 	}
 
@@ -245,7 +252,7 @@ func (s *server) broadcastGoalCountReached() {
 }
 
 func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pbIntra.SelectorId) (*pbIntra.Empty, error) {
-	log.Println("Received mid averaging complete message from selector id: %s at : Time:", selectorID.Id, time.Since(start))
+	log.Println("Received mid averaging complete message from selector id:", selectorID.Id, " at : Time:", time.Since(start))
 
 	// create a write operation
 	write := writeOp{
@@ -271,6 +278,7 @@ func check(err error, errorMsg string) {
 }
 
 func (s *server) resetFLVariables() {
+	s.numClientCheckIns = 0
 	s.selectorCheckinList = make(map[string]bool)
 	s.selectorFinishList = make(map[string]bool)
 }
