@@ -81,7 +81,7 @@ func main() {
 	// 	log.Fatalln("Usage: go run ", os.Args[0], "<Coordinator Port>", "<FL Files Root>")
 	// }
 
-	port = ":" + viper.GetString("coordinator_port")
+	port = ":" + viper.GetString("port")
 	flRootPath := viper.GetString("fl_root_path")
 
 	// listen
