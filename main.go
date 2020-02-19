@@ -191,6 +191,7 @@ func (s *server) FederatedAveraging() {
 		data, err := ioutil.ReadFile(aggCheckpointWeightPath)
 		if err != nil {
 			log.Println("FederatedAveraging: Unable to read checkpoint weight file. Time:", time.Since(start))
+			log.Println(err)
 			return
 		}
 		checkpointWeight, _ := strconv.ParseInt(string(data), 10, 64)
@@ -206,6 +207,7 @@ func (s *server) FederatedAveraging() {
 	err := cmd.Run()
 	if err != nil {
 		log.Println("FederatedAveraging ==> Unable to run federated averaging. Time:", time.Since(start))
+		log.Println(err)
 		return
 	}
 }
@@ -240,6 +242,8 @@ func (s *server) broadcastGoalCountReached() {
 
 		if err != nil {
 			log.Fatalf("Could not connect to %s: %s", selector, err)
+			log.Println(err)
+			return
 		}
 		defer conn.Close()
 
@@ -248,6 +252,8 @@ func (s *server) broadcastGoalCountReached() {
 
 		if err != nil {
 			log.Fatalf("Error sending to %s:  %s", selector, err)
+			log.Println(err)
+			return
 		}
 		log.Printf("Goal Count Reached message sent to %s", selector)
 	}
