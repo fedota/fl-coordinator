@@ -66,8 +66,8 @@ func init() {
 	viper.AddConfigPath(".")      // optionally look for config in the working directory
 	viper.AutomaticEnv()
 
-	err := viper.ReadInConfig()   // Find and read the config file
-	if err != nil {               // Handle errors reading the config file
+	err := viper.ReadInConfig() // Find and read the config file
+	if err != nil {             // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s", err))
 	}
 	// TODO: Add defaults for config using viper
@@ -81,8 +81,8 @@ func main() {
 	// 	log.Fatalln("Usage: go run ", os.Args[0], "<Coordinator Port>", "<FL Files Root>")
 	// }
 
-	port = ":" + viper.GetString("coordinator-port")
-	flRootPath := viper.GetString("fl-root-path")
+	port = ":" + viper.GetString("coordinator_port")
+	flRootPath := viper.GetString("fl_root_path")
 
 	// listen
 	lis, err := net.Listen("tcp", port)
@@ -133,7 +133,7 @@ func (s *server) ConnectionHandler() {
 			log.Println("Handler ==> Write Query:", write.varType, "Time:", time.Since(start))
 			switch write.varType {
 			case varClientCheckin:
-				if s.numClientCheckIns == viper.GetInt("checkin-limit") {
+				if s.numClientCheckIns == viper.GetInt("checkin_limit") {
 					log.Println("Cannot accept client as global count is already reached. Time:", time.Since(start))
 					write.response <- false
 				} else {
@@ -165,7 +165,7 @@ func (s *server) ConnectionHandler() {
 				}
 			}
 		// After wait period check if everything is fine
-		case <-time.After(time.Duration(viper.GetInt64("estimated-waiting-time")) * time.Second):
+		case <-time.After(time.Duration(viper.GetInt64("estimated_waiting_time")) * time.Second):
 			log.Println("Update Handler ==> Timeout", "Time:", time.Since(start))
 			// if checkin limit is not reached
 			// abandon round
@@ -179,15 +179,15 @@ func (s *server) ConnectionHandler() {
 // Runs federated averaging
 func (s *server) FederatedAveraging() {
 
-	completeInitPath := s.flRootPath + viper.GetString("init-files-path")
-	checkpointFilePath := completeInitPath + viper.GetString("checkpoint-file")
-	modelFilePath := completeInitPath + viper.GetString("model-file")
+	completeInitPath := s.flRootPath + viper.GetString("init_files_path")
+	checkpointFilePath := completeInitPath + viper.GetString("checkpoint_file")
+	modelFilePath := completeInitPath + viper.GetString("model_file")
 	var argsList []string
 	argsList = append(argsList, "federated_averaging.py", "--cf", checkpointFilePath, "--mf", modelFilePath, "--u")
 	for selectorID := range s.selectorFinishList {
 		selectorFilePath := s.flRootPath + selectorID
-		aggCheckpointFilePath := selectorFilePath + viper.GetString("agg-checkpoint-file-path")
-		aggCheckpointWeightPath := selectorFilePath + viper.GetString("agg-checkpoint-weight-path")
+		aggCheckpointFilePath := selectorFilePath + viper.GetString("agg_checkpoint_file_path")
+		aggCheckpointWeightPath := selectorFilePath + viper.GetString("agg_checkpoint_weight_path")
 		data, err := ioutil.ReadFile(aggCheckpointWeightPath)
 		if err != nil {
 			log.Println("FederatedAveraging: Unable to read checkpoint weight file. Time:", time.Since(start))
@@ -226,7 +226,7 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 
 	success := <-write.response
 
-	if success && s.numClientCheckIns == viper.GetInt("checkin-limit") {
+	if success && s.numClientCheckIns == viper.GetInt("checkin_limit") {
 		go s.broadcastGoalCountReached()
 	}
 
