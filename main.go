@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -180,15 +181,15 @@ func (s *server) ConnectionHandler() {
 // Runs federated averaging
 func (s *server) FederatedAveraging() {
 
-	completeInitPath := s.flRootPath + viper.GetString("INIT_FILES_PATH")
-	checkpointFilePath := completeInitPath + viper.GetString("CHECKPOINT_FILE")
-	modelFilePath := completeInitPath + viper.GetString("MODEL_FILE")
+	completeInitPath := filepath.Join(s.flRootPath, viper.GetString("INIT_FILES_PATH"))
+	checkpointFilePath := filepath.Join(completeInitPath, viper.GetString("CHECKPOINT_FILE"))
+	modelFilePath := filepath.Join(completeInitPath, viper.GetString("MODEL_FILE"))
 	var argsList []string
 	argsList = append(argsList, "federated_averaging.py", "--cf", checkpointFilePath, "--mf", modelFilePath, "--u")
 	for selectorID := range s.selectorFinishList {
-		selectorFilePath := s.flRootPath + selectorID
-		aggCheckpointFilePath := selectorFilePath + viper.GetString("AGG_CHECKPOINT_FILE_PATH")
-		aggCheckpointWeightPath := selectorFilePath + viper.GetString("AGG_CHECKPOINT_WEIGHT_PATH")
+		selectorFilePath := filepath.Join(s.flRootPath, selectorID)
+		aggCheckpointFilePath := filepath.Join(selectorFilePath, viper.GetString("AGG_CHECKPOINT_FILE_PATH"))
+		aggCheckpointWeightPath := filepath.Join(selectorFilePath, viper.GetString("AGG_CHECKPOINT_WEIGHT_PATH"))
 		data, err := ioutil.ReadFile(aggCheckpointWeightPath)
 		if err != nil {
 			log.Println("FederatedAveraging: Unable to read checkpoint weight file. Time:", time.Since(start))
