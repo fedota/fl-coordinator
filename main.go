@@ -237,27 +237,28 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 }
 
 func (s *server) broadcastGoalCountReached() {
-	for _, selector := range selectorAddresses {
-		var conn *grpc.ClientConn
-		conn, err := grpc.Dial(selector, grpc.WithInsecure())
+	// for _, selector := range selectorAddresses {
+	selector := selectorAddress
+	var conn *grpc.ClientConn
+	conn, err := grpc.Dial(selector, grpc.WithInsecure())
 
-		if err != nil {
-			log.Fatalf("Could not connect to %s: %s", selector, err)
-			log.Println(err)
-			return
-		}
-		defer conn.Close()
-
-		c := pbIntra.NewFLGoalCountBroadcastClient(conn)
-		_, err = c.GoalCountReached(context.Background(), &pbIntra.Empty{})
-
-		if err != nil {
-			log.Fatalf("Error sending to %s:  %s", selector, err)
-			log.Println(err)
-			return
-		}
-		log.Printf("Goal Count Reached message sent to %s", selector)
+	if err != nil {
+		log.Fatalf("Could not connect to %s: %s", selector, err)
+		log.Println(err)
+		return
 	}
+	defer conn.Close()
+
+	c := pbIntra.NewFLGoalCountBroadcastClient(conn)
+	_, err = c.GoalCountReached(context.Background(), &pbIntra.Empty{})
+
+	if err != nil {
+		log.Fatalf("Error sending to %s:  %s", selector, err)
+		log.Println(err)
+		return
+	}
+	log.Printf("Goal Count Reached message sent to %s", selector)
+	// }
 }
 
 func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pbIntra.SelectorId) (*pbIntra.Empty, error) {

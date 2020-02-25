@@ -28,6 +28,7 @@ ARG GO_COORDINATOR_PATH
 # Copy from builder the GO executable file
 COPY --from=builder ${GO_COORDINATOR_PATH}/server .
 COPY --from=builder ${GO_COORDINATOR_PATH}/config.yaml .
+COPY --from=builder ${GO_COORDINATOR_PATH}/federated_averaging.py .
 
 # Execute the program upon start 
 CMD ["./server"]
