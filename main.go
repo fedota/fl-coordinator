@@ -20,7 +20,7 @@ var start time.Time
 var port string
 
 // TODO: Selector addresses should be sent from selector along with ID
-var selectorAddresses = []string{"localhost:50051"}
+var selectorAddress string
 
 // constants
 const (
@@ -83,6 +83,7 @@ func main() {
 
 	port = ":" + viper.GetString("PORT")
 	flRootPath := viper.GetString("FL_ROOT_PATH")
+	selectorAddress = viper.GetString("SELECTOR_ADDRESS")
 
 	// listen
 	lis, err := net.Listen("tcp", port)
