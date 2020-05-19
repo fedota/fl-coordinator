@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc"
 
 	pbIntra "fedota/fl-coordinator/genproto/fl_intra"
-	// pbStatus "fedota/fl-coordinator/genproto/fl_status"
+	pbStatus "fedota/fl-coordinator/genproto/fl_status"
 )
 
 var start time.Time
@@ -25,11 +25,6 @@ var start time.Time
 const (
 	varClientCheckin  = iota
 	varSelectorFinish = iota
-
-	StageSelection = 0;
-	StageConfiguration = 1;
-	StageReporting = 2;
-	StageCompleted = 3;
 )
 
 
@@ -50,7 +45,8 @@ type writeOp struct {
 type server struct {
 	flRootPath          string
 	selectorAddress     string
-	stage               int
+	webserverAddress    string
+	stage               pbStatus.Stages
 	roundNo             int
 	reads               chan readOp
 	writes              chan writeOp
@@ -87,6 +83,7 @@ func main() {
 	port := ":" + viper.GetString("PORT")
 	flRootPath := viper.GetString("FL_ROOT_PATH")
 	selectorAddress := viper.GetString("SELECTOR_ADDRESS")
+	webserverAddress := viper.GetString("WEBSERVER_ADDRESS")
 
 	// listen
 	lis, err := net.Listen("tcp", port)
@@ -97,7 +94,8 @@ func main() {
 	flCoordinator := &server{
 		flRootPath:          flRootPath,
 		selectorAddress:     selectorAddress,
-		stage:               StageSelection,
+		webserverAddress:    webserverAddress,
+		stage:               pbStatus.Stages_SELECTION,
 		roundNo:             0,
 		reads:               make(chan readOp),
 		writes:              make(chan writeOp),
@@ -144,6 +142,11 @@ func (s *server) ConnectionHandler() {
 					log.Println("Cannot accept client as global count is already reached. Time:", time.Since(start))
 					write.response <- false
 				} else {
+					if s.stage == pbStatus.Stages_COMPLETED {
+						s.stage = pbStatus.Stages_SELECTION 
+						// send status to webserver
+						go s.sendRoundStatus()
+					}
 					// new client
 					s.numClientCheckIns++
 					// note selector id
@@ -157,7 +160,7 @@ func (s *server) ConnectionHandler() {
 				// once limit is reaches with this request boadcast to all selectors
 				// to start configuration stage 
 				if s.numClientCheckIns == viper.GetInt("CHECKIN_LIMIT") {
-					s.stage = StageConfiguration 
+					s.stage = pbStatus.Stages_CONFIGURATION 
 					// send status to webserver
 					go s.sendRoundStatus()
 					// TODO: have to check status for it to be restarted if it fails 
@@ -166,8 +169,8 @@ func (s *server) ConnectionHandler() {
 				}
 
 			case varSelectorFinish:
-				if s.stage == StageConfiguration {
-					s.stage = StageReporting 
+				if s.stage == pbStatus.Stages_CONFIGURATION {
+					s.stage = pbStatus.Stages_REPORTING 
 					// send status to webserver
 					go s.sendRoundStatus()
 				}
@@ -187,7 +190,7 @@ func (s *server) ConnectionHandler() {
 					// begin federated averaging process
 					log.Println("Begin Federated Averaging Process")
 					s.FederatedAveraging()
-					s.stage = StageCompleted
+					s.stage = pbStatus.Stages_COMPLETED
 					// send status to webserver
 					go s.sendRoundStatus()
 					s.resetFLVariables(true)
@@ -314,16 +317,37 @@ func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pb
 }
 
 
-// TODO
 // send round status to the webserver
 func (s *server) sendRoundStatus() {
+	// create client
+	var conn *grpc.ClientConn
+	conn, err := grpc.Dial(s.webserverAddress, grpc.WithInsecure())
 
+	if err != nil {
+		log.Fatalf("Could not connect to %s: %s", s.webserverAddress, err)
+		log.Println(err)
+		return
+	}
+	defer conn.Close()
+
+	// send status
+	c := pbStatus.NewFlStatusClient(conn)
+	_, err = c.RoundStatus(context.Background(), &pbStatus.FlRoundStatus{
+		Stage: s.stage,
+		RoundNo: uint32(s.roundNo)})
+
+	if err != nil {
+		log.Fatalf("Error sending to %s:  %s", s.webserverAddress, err)
+		log.Println(err)
+		return
+	}
+	log.Printf("Status update message sent to %s", s.webserverAddress)
 }
 
 
 // reset round variables
 func (s *server) resetFLVariables(complete bool) {
-	s.stage = StageSelection
+	s.stage = pbStatus.Stages_SELECTION
 	if complete {
 		s.roundNo++
 	} else {
