@@ -1,2 +1,4 @@
 genproto/
 data/
+go.sum
+go.mod
