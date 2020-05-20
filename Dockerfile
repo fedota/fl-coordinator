@@ -1,4 +1,4 @@
-ARG GO_COORDINATOR_PATH="/go/src/federated-learning/fl-coordinator"
+ARG GO_COORDINATOR_PATH="/go/src/fedota/fl-coordinator"
 
 ################## 1st Build Stage ####################
 FROM golang:alpine AS builder

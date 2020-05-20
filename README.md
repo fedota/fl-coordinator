@@ -12,8 +12,10 @@ It has access to the following contents in the shared directory (more informatio
 ```
 \data 
 	\initFiles
-		fl_checkpoint <- RW 
+		fl_checkpoint <- W 
 		model.h5 <- R
+		.
+		.
 	\<selector-id>
 		fl_agg_checkpoint <- R
 		fl_agg_checkpoint_weight <- R
@@ -35,8 +37,7 @@ It has access to the following contents in the shared directory (more informatio
 
 ## Setup 
 1. Compile protobuf needed in [fl-misc](https://github.com/fedota/fl-misc) by `fl-proto.sh` script
-2. Create go modules dependencies files by `go mod init`
-3. Build the docker image:
+2. Build the docker image:
 	```
 	docker build -t fl-coordinator .
 	```
@@ -46,6 +47,8 @@ It has access to the following contents in the shared directory (more informatio
 
 - To inspect the container, open bash using:
 `docker run -it fl-coordinator bash`
+
+[Optional] Install dependencies files by `go test`
 
 ## Resources
 -  Mark McGranaghan: https://gobyexample.com/stateful-goroutines
