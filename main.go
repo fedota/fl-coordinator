@@ -43,6 +43,7 @@ type writeOp struct {
 
 // server struct to implement gRPC server interface
 type server struct {
+	problemID           string
 	flRootPath          string
 	selectorAddress     string
 	webserverAddress    string
@@ -84,6 +85,7 @@ func main() {
 	flRootPath := viper.GetString("FL_ROOT_PATH")
 	selectorAddress := viper.GetString("SELECTOR_ADDRESS")
 	webserverAddress := viper.GetString("WEBSERVER_ADDRESS")
+	problemID := viper.GetString("PROBLEM_ID")
 
 	// listen
 	lis, err := net.Listen("tcp", port)
@@ -92,6 +94,7 @@ func main() {
 	srv := grpc.NewServer()
 	// server impl instance
 	flCoordinator := &server{
+		problemID:           problemID,
 		flRootPath:          flRootPath,
 		selectorAddress:     selectorAddress,
 		webserverAddress:    webserverAddress,
