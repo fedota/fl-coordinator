@@ -27,7 +27,6 @@ const (
 	varSelectorFinish = iota
 )
 
-
 // to handle read writes
 type readOp struct {
 	varType  int
@@ -39,7 +38,6 @@ type writeOp struct {
 	val      int
 	response chan bool
 }
-
 
 // server struct to implement gRPC server interface
 type server struct {
@@ -56,7 +54,6 @@ type server struct {
 	selectorFinishList  map[string]bool
 }
 
-
 func init() {
 	start = time.Now()
 
@@ -70,7 +67,6 @@ func init() {
 	}
 	//TODO: Add defaults for config using viper
 }
-
 
 func main() {
 	// Enable line numbers in logging
@@ -117,7 +113,6 @@ func main() {
 	check(err, "Failed to serve on port "+port)
 }
 
-
 // Handler for connection reads and updates to shared variables
 // varClient check (when selector sends ping as it gets a new client connection)
 // var selector fininsh
@@ -143,7 +138,7 @@ func (s *server) ConnectionHandler() {
 					write.response <- false
 				} else {
 					if s.stage == pbStatus.Stages_COMPLETED {
-						s.stage = pbStatus.Stages_SELECTION 
+						s.stage = pbStatus.Stages_SELECTION
 						// send status to webserver
 						go s.sendRoundStatus()
 					}
@@ -156,21 +151,21 @@ func (s *server) ConnectionHandler() {
 					log.Println("Handler ==> accepted", "Time:", time.Since(start))
 					write.response <- true
 				}
-				
+
 				// once limit is reaches with this request boadcast to all selectors
-				// to start configuration stage 
+				// to start configuration stage
 				if s.numClientCheckIns == viper.GetInt("CHECKIN_LIMIT") {
-					s.stage = pbStatus.Stages_CONFIGURATION 
+					s.stage = pbStatus.Stages_CONFIGURATION
 					// send status to webserver
 					go s.sendRoundStatus()
-					// TODO: have to check status for it to be restarted if it fails 
+					// TODO: have to check status for it to be restarted if it fails
 					// or reset round after a number of fails
 					go s.broadcastGoalCountReached()
 				}
 
 			case varSelectorFinish:
 				if s.stage == pbStatus.Stages_CONFIGURATION {
-					s.stage = pbStatus.Stages_REPORTING 
+					s.stage = pbStatus.Stages_REPORTING
 					// send status to webserver
 					go s.sendRoundStatus()
 				}
@@ -200,7 +195,6 @@ func (s *server) ConnectionHandler() {
 	}
 }
 
-
 // Runs federated averaging
 func (s *server) FederatedAveraging() {
 
@@ -209,9 +203,9 @@ func (s *server) FederatedAveraging() {
 	checkpointFilePath := filepath.Join(completeInitPath, viper.GetString("CHECKPOINT_FILE"))
 	modelFilePath := filepath.Join(completeInitPath, viper.GetString("MODEL_FILE"))
 	var argsList []string
-	// construct arguments requried for federated averaging 
+	// construct arguments requried for federated averaging
 	argsList = append(argsList, "federated_averaging.py", "--cf", checkpointFilePath, "--mf", modelFilePath, "--u")
-	
+
 	// get files locations and weight for the aggregation/averaging done by selectors
 	for selectorID := range s.selectorFinishList {
 		selectorFilePath := filepath.Join(s.flRootPath, selectorID)
@@ -241,8 +235,7 @@ func (s *server) FederatedAveraging() {
 	}
 }
 
-
-// selectors sends message to the coordinator with the new count of clients with them 
+// selectors sends message to the coordinator with the new count of clients with them
 // Sends true if the client is accepted, false if global count was already reached
 func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.ClientCount) (*pbIntra.FlClientStatus, error) {
 
@@ -262,20 +255,19 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 	return &pbIntra.FlClientStatus{Accepted: success}, nil
 }
 
-
 // broadcast to the selectors
 func (s *server) broadcastGoalCountReached() {
 	// for _, selector := range selectorAddresses {
 	// with k8s dns will be able to send to all replicas
 	selector := s.selectorAddress
-	
+
 	// create client
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(selector, grpc.WithInsecure())
 
 	if err != nil {
-		log.Fatalf("Could not connect to %s: %s", selector, err)
-		log.Println(err)
+		// log.Fatalf("Could not connect to %s: %s", selector, err)
+		log.Println("Could not connect to %s: %s", selector, err)
 		return
 	}
 	defer conn.Close()
@@ -285,14 +277,13 @@ func (s *server) broadcastGoalCountReached() {
 	_, err = c.GoalCountReached(context.Background(), &pbIntra.Empty{})
 
 	if err != nil {
-		log.Fatalf("Error sending to %s:  %s", selector, err)
-		log.Println(err)
+		// log.Fatalf("Error sending to %s:  %s", selector, err)
+		log.Println("Error sending to %s:  %s", selector, err)
 		return
 	}
 	log.Printf("Goal Count Reached message sent to %s", selector)
 	// }
 }
-
 
 // receive pings from selectors to note that they have completed aggregation of weights send by respective clients
 func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pbIntra.SelectorId) (*pbIntra.Empty, error) {
@@ -307,7 +298,7 @@ func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pb
 	// send to handler (ConnectionHandler) via writes channel
 	s.writes <- write
 
-	// TODO: just <-write.response as we are not doing anything if response false 
+	// TODO: just <-write.response as we are not doing anything if response false
 	if !(<-write.response) {
 		log.Println("Selector not considered for federated averaging process. Time:", time.Since(start))
 	}
@@ -316,7 +307,6 @@ func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pb
 	return &pbIntra.Empty{}, nil
 }
 
-
 // send round status to the webserver
 func (s *server) sendRoundStatus() {
 	// create client
@@ -324,8 +314,8 @@ func (s *server) sendRoundStatus() {
 	conn, err := grpc.Dial(s.webserverAddress, grpc.WithInsecure())
 
 	if err != nil {
-		log.Fatalf("Could not connect to %s: %s", s.webserverAddress, err)
-		log.Println(err)
+		// log.Fatal("Could not connect to %s: %s", s.webserverAddress, err)
+		log.Println("Could not connect to %s: %s", s.webserverAddress, err)
 		return
 	}
 	defer conn.Close()
@@ -333,17 +323,16 @@ func (s *server) sendRoundStatus() {
 	// send status
 	c := pbStatus.NewFlStatusClient(conn)
 	_, err = c.RoundStatus(context.Background(), &pbStatus.FlRoundStatus{
-		Stage: s.stage,
+		Stage:   s.stage,
 		RoundNo: uint32(s.roundNo)})
 
 	if err != nil {
-		log.Fatalf("Error sending to %s:  %s", s.webserverAddress, err)
-		log.Println(err)
+		// log.Fatalf("Error sending to %s:  %s", s.webserverAddress, err)
+		log.Println("Error sending to %s:  %s", s.webserverAddress, err)
 		return
 	}
 	log.Printf("Status update message sent to %s", s.webserverAddress)
 }
-
 
 // reset round variables
 func (s *server) resetFLVariables(complete bool) {
@@ -358,7 +347,6 @@ func (s *server) resetFLVariables(complete bool) {
 	s.selectorCheckinList = make(map[string]bool)
 	s.selectorFinishList = make(map[string]bool)
 }
-
 
 // Check for error, log and exit if err
 func check(err error, errorMsg string) {
