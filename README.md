@@ -38,18 +38,18 @@ It has access to the following contents in the shared directory (more informatio
 ## Setup 
 1. Compile protobuf needed in [fl-misc](https://github.com/fedota/fl-misc) by `fl-proto.sh` script
 2. Build the docker image:
-	`docker build -t fl-coordinator .`
+	`docker build -t fedota/fl-coordinator .`
 
 - Run the container using:
-`docker run --rm --name coord -p 50050:50050 -v /path/to/shared/dir:/data  fl-coordinator` \
+`docker run --rm --name coord -p 50050:50050 -v /path/to/shared/dir:/data fedota/fl-coordinator` \
 If running *fl-coordinator* and *fl-selector* locally replace `-p 50050:50050` with `--network="host"`\
-For example, `docker run --rm --name coord --network="host" -v $PWD/../data:/data  fl-coordinator` 
+For example, `docker run --rm --name coord --network="host" -v $PWD/../data:/data fedota/fl-coordinator` 
 
 - To inspect the running container, open bash using:
 `docker exec -t -i coord /bin/bash`
 
 - To simply run and inspect a new container, execute:
-`docker run -it fl-coordinator bash`
+`docker run -it fedota/fl-coordinator bash`
 
 [Optional] Install dependencies files by `go test`
 
