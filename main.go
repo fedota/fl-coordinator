@@ -43,7 +43,6 @@ type writeOp struct {
 type server struct {
 	problemID           string
 	flRootPath          string
-	selectorAddress     string
 	webserverAddress    string
 	stage               pbStatus.Stages
 	roundNo             int
@@ -79,7 +78,6 @@ func main() {
 
 	port := ":" + viper.GetString("PORT")
 	flRootPath := viper.GetString("FL_ROOT_PATH")
-	selectorAddress := viper.GetString("SELECTOR_ADDRESS")
 	webserverAddress := viper.GetString("WEBSERVER_ADDRESS")
 	problemID := viper.GetString("PROBLEM_ID")
 
@@ -92,7 +90,6 @@ func main() {
 	flCoordinator := &server{
 		problemID:           problemID,
 		flRootPath:          flRootPath,
-		selectorAddress:     selectorAddress,
 		webserverAddress:    webserverAddress,
 		stage:               pbStatus.Stages_SELECTION,
 		roundNo:             0,
@@ -118,7 +115,7 @@ func main() {
 
 // Handler for connection reads and updates to shared variables
 // varClient check (when selector sends ping as it gets a new client connection)
-// var selector fininsh
+// var selector finish
 func (s *server) ConnectionHandler() {
 	for {
 		select {
@@ -155,7 +152,7 @@ func (s *server) ConnectionHandler() {
 					write.response <- true
 				}
 
-				// once limit is reaches with this request boadcast to all selectors
+				// once limit is reaches with this request broadcast to all selectors
 				// to start configuration stage
 				if s.numClientCheckIns == viper.GetInt("CHECKIN_LIMIT") {
 					s.stage = pbStatus.Stages_CONFIGURATION
@@ -206,7 +203,7 @@ func (s *server) FederatedAveraging() {
 	checkpointFilePath := filepath.Join(completeInitPath, viper.GetString("CHECKPOINT_FILE"))
 	modelFilePath := filepath.Join(completeInitPath, viper.GetString("MODEL_FILE"))
 	var argsList []string
-	// construct arguments requried for federated averaging
+	// construct arguments required for federated averaging
 	argsList = append(argsList, "federated_averaging.py", "--cf", checkpointFilePath, "--mf", modelFilePath, "--u")
 
 	// get files locations and weight for the aggregation/averaging done by selectors
@@ -260,32 +257,31 @@ func (s *server) ClientCountUpdate(ctx context.Context, clientCount *pbIntra.Cli
 
 // broadcast to the selectors
 func (s *server) broadcastGoalCountReached() {
-	// for _, selector := range selectorAddresses {
-	// with k8s dns will be able to send to all replicas
-	selector := s.selectorAddress
+	for selectorAddr := range s.selectorCheckinList {
+		selector := selectorAddr
 
-	// create client
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(selector, grpc.WithInsecure())
+		// create client
+		var conn *grpc.ClientConn
+		conn, err := grpc.Dial(selector, grpc.WithInsecure())
 
-	if err != nil {
-		// log.Fatalf("Could not connect to %s: %s", selector, err)
-		log.Println("Could not connect to %s: %s", selector, err)
-		return
+		if err != nil {
+			// log.Fatalf("Could not connect to %s: %s", selector, err)
+			log.Println("Could not connect to %s: %s", selector, err)
+			return
+		}
+		defer conn.Close()
+
+		// send broadcast
+		c := pbIntra.NewFLGoalCountBroadcastClient(conn)
+		_, err = c.GoalCountReached(context.Background(), &pbIntra.Empty{})
+
+		if err != nil {
+			// log.Fatalf("Error sending to %s:  %s", selector, err)
+			log.Println("Error sending to %s:  %s", selector, err)
+			return
+		}
+		log.Printf("Goal Count Reached message sent to %s", selector)
 	}
-	defer conn.Close()
-
-	// send broadcast
-	c := pbIntra.NewFLGoalCountBroadcastClient(conn)
-	_, err = c.GoalCountReached(context.Background(), &pbIntra.Empty{})
-
-	if err != nil {
-		// log.Fatalf("Error sending to %s:  %s", selector, err)
-		log.Println("Error sending to %s:  %s", selector, err)
-		return
-	}
-	log.Printf("Goal Count Reached message sent to %s", selector)
-	// }
 }
 
 // receive pings from selectors to note that they have completed aggregation of weights send by respective clients

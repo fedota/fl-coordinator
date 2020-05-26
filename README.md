@@ -2,7 +2,7 @@
 Master Aggregator and Coordinator (MAC) for the Federated Learning system
 
 ## Overview
-Fl Coordinator has the following reponsibilites
+Fl Coordinator has the following responsibilities
 - Work with selectors to determine whether the required client count for starting the round has been reached.
 - Give the signal for selectors to go ahead with Configuration stage in federated learning
 - After selectors have completed aggregation of weights from their respective client (Reporting stage) the coordinator will perform the final aggregation and update the weights of the global model
