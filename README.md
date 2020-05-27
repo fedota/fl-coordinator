@@ -41,9 +41,9 @@ It has access to the following contents in the shared directory (more informatio
 	`docker build -t fedota/fl-coordinator .`
 
 - Run the container using:
-`docker run --rm --name coord -p 50050:50050 -v /path/to/shared/dir:/data fedota/fl-coordinator` \
+`docker run --rm --name coord -p 50050:50050 -v /path/to/shared/dir:/data -v /path_to/config.yaml:/server_dir/config.yaml fedota/fl-coordinator` \
 If running *fl-coordinator* and *fl-selector* locally replace `-p 50050:50050` with `--network="host"`\
-For example, `docker run --rm --name coord --network="host" -v $PWD/../data:/data fedota/fl-coordinator` 
+For example, `docker run --rm --name coord --network="host" -v $PWD/../data:/data -v $PWD/config.yaml:/server_dir/config.yaml fedota/fl-coordinator` 
 
 - To inspect the running container, open bash using:
 `docker exec -t -i coord /bin/bash`
