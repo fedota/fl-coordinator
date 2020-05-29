@@ -1,12 +1,12 @@
-# FL Coordinator
+# Coordinator
 Master Aggregator and Coordinator (MAC) for the Federated Learning system
 
 ## Overview
-Fl Coordinator has the following responsibilities
-- Work with selectors to determine whether the required client count for starting the round has been reached.
-- Give the signal for selectors to go ahead with Configuration stage in federated learning
-- After selectors have completed aggregation of weights from their respective client (Reporting stage) the coordinator will perform the final aggregation and update the weights of the global model
-- Inform status of the round to the webserver
+Coordinator has the following responsibilities
+- Work with Selectors to determine whether the required client count for starting the round has been reached.
+- Give the signal for Selectors to go ahead with Configuration stage in federated learning
+- After Selectors have completed aggregation of weights from their respective client (Reporting stage) the coordinator will perform the final aggregation and update the weights of the global model
+- Inform status of the round to the Webserver
 
 It has access to the following contents in the shared directory (more information: [fedota-infra](https://github.com/fedota/fedota-infra))
 ```
@@ -27,13 +27,13 @@ It has access to the following contents in the shared directory (more informatio
 ```
 
 ### Workflow
-- In the Selection stage, it received a ping from the selector, handled by a separate go-rountine via gRPC(once the selector has received a connection from the client) with the current client count. 
-- An update is made via the ConnectionHandler to the client count variable using channels to avoid inconsistencies. If the goal count for clients has not been reached conditional acceptance is back to the go rountine and hence to the selector (to hold the client with it) essentially using FCFS for now. 
-- If the goal count has reached and any more client connnections come in, they are rejected by the connection handler and dropped by the respective selector.
-- When the goal count, it send a broadcast to the selectors stating them to being Configuration and updates the stage. 
-- Once selectors send a ping noting they have completed aggregating weights from client, Reporting stage being. After all the selectors have done so, the final federated averaging process starts using those selector aggregated weights
-- Federated averaging uses the files aggregated checkpoint and aggregated weight files of selectors as shown above and updates/writes the result to global checkpoint in `initFiles`
-- Each stage update is reported to the webserver
+- In the Selection stage, it received a ping from the Selector, handled by a separate go-routine via gRPC with the current client count, once the Selector has received a connection from the client.
+- An update is made via the ConnectionHandler to the client count variable using channels to avoid inconsistencies. If the goal count for clients has not been reached conditional acceptance is back to the go routine and hence to the Selector (to hold the client with it) essentially using FCFS for now. 
+- If the goal count has reached and any more client connections come in, they are rejected by the connection handler and dropped by the respective Selector.
+- When the goal count is met, it sends a message to the Selectors holding client connections, instructing them to being Configuration and then updates the stage.
+- Once Selectors send a ping, noting they have completed aggregating weights from client, Reporting stage beings. After all the Selectors have done so, the final federated averaging process starts using those Selector aggregated weights
+- Federated averaging uses the files aggregated checkpoint and aggregated weight files of Selectors as shown above and updates/writes the result to global checkpoint in `initFiles`
+- Each stage update is reported to the Webserver
 
 ## Setup 
 1. Compile protobuf needed in [fl-misc](https://github.com/fedota/fl-misc) by `fl-proto.sh` script
