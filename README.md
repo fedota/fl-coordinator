@@ -4,13 +4,13 @@ Master Aggregator and Coordinator (MAC) for the Federated Learning system
 ## Overview
 Coordinator has the following responsibilities
 - Work with Selectors to determine whether the required client count for starting the round has been reached.
-- Give the signal for Selectors to go ahead with Configuration stage in federated learning
+- Give the signal for [Selectors](https://github.com/fedota/fl-selector) to go ahead with Configuration stage in federated learning
 - After Selectors have completed aggregation of weights from their respective client (Reporting stage) the coordinator will perform the final aggregation and update the weights of the global model
-- Inform status of the round to the Webserver
+- Inform status of the round to the [Webserver](https://github.com/fedota/fl-webserver)
 
-It has access to the following contents in the shared directory (more information: [fedota-infra](https://github.com/fedota/fedota-infra))
+It has access to the following contents in the shared directory (more information: [fedota-infra](https://github.com/fedota/fedota-infra#shared-file-storage-structure))
 ```
-\data 
+\<fl-problem-id> 
 	\initFiles
 		fl_checkpoint <- W 
 		model.h5 <- R
@@ -54,4 +54,4 @@ For example, `docker run --rm --name coord --network="host" -v $PWD/../data:/dat
 [Optional] Install dependencies files by `go test`
 
 ## Resources
--  Mark McGranaghan: https://gobyexample.com/stateful-goroutines
+- Mark McGranaghan: https://gobyexample.com/stateful-goroutines
