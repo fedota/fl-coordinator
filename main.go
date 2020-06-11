@@ -262,11 +262,12 @@ func (s *server) broadcastGoalCountReached() {
 
 		// create client
 		var conn *grpc.ClientConn
-		conn, err := grpc.Dial(selector, grpc.WithInsecure())
+		conn, err := grpc.Dial(selector, grpc.WithInsecure(), grpc.WithBlock())
 
 		if err != nil {
 			// log.Fatalf("Could not connect to %s: %s", selector, err)
-			log.Println("Could not connect to %s: %s", selector, err)
+			log.Println("Could not connect to: ", selector)
+			log.Println(err)
 			return
 		}
 		defer conn.Close()
@@ -277,7 +278,8 @@ func (s *server) broadcastGoalCountReached() {
 
 		if err != nil {
 			// log.Fatalf("Error sending to %s:  %s", selector, err)
-			log.Println("Error sending to %s:  %s", selector, err)
+			log.Println("Could not connect to: ", selector)
+			log.Println(err)
 			return
 		}
 		log.Printf("Goal Count Reached message sent to %s", selector)
@@ -310,11 +312,12 @@ func (s *server) SelectorAggregationComplete(ctx context.Context, selectorID *pb
 func (s *server) sendRoundStatus() {
 	// create client
 	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.webserverAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(s.webserverAddress, grpc.WithInsecure(), grpc.WithBlock())
 
 	if err != nil {
 		// log.Fatal("Could not connect to %s: %s", s.webserverAddress, err)
-		log.Println("Could not connect to %s: %s", s.webserverAddress, err)
+		log.Println("Could not connect to :", s.webserverAddress)
+		log.Println(err)
 		return
 	}
 	defer conn.Close()
